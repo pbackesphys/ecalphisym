@@ -19,8 +19,9 @@ plt.style.use(mplhep.style.ROOT)
 #parse arguments
 parser = parser = argparse.ArgumentParser()
 parser.add_argument("-n", "--naod",    action="store",      type=str,     help="input minbias naod")
-parser.add_argument("-p", "--plots",    action="store",      type=str,  default="../MonitoringPlot"    ,  help="output directory for plots")
+parser.add_argument("-p", "--plots",    action="store",      type=str,  default="../MonitoringPlot_nomerging"    ,  help="output directory for plots")
 parser.add_argument("-i", "--ics",    action="store",      type=str,   default="../ICs"  ,   help="output directory for ics")
+parser.add_argument("--merge",  action=argparse.BooleanOptionalAction ,  help="merge fill with less hits than a thr")
 parser.add_argument("--savePlots",  action=argparse.BooleanOptionalAction ,  help="save or not the plots")
 parser.add_argument("--saveICs",   action=argparse.BooleanOptionalAction ,   help="save or not the ics") 
 
@@ -29,6 +30,7 @@ args = parser.parse_args()
 naod = args.naod # '../Run2018D_test.root'
 saveICs = args.saveICs
 savePlots = args.savePlots
+merge = args.merge
 
 
 
@@ -56,7 +58,48 @@ info = ak.unflatten(runs.EcalPhiSymInfo, splits, axis=0, behavior=runs.behavior)
 ebhits = ak.unflatten(runs.EcalPhiSymEB, splits, axis=0, behavior=runs.behavior).sum(axis=1)
 eehits = ak.unflatten(runs.EcalPhiSymEE, splits, axis=0, behavior=runs.behavior).sum(axis=1)
 
-niovs = len(info.fill)
+# try to put togheter fills with less stats
+if merge:
+    nhitsTOT = ak.sum(ebhits.nhits, axis=1)
+    
+    it = splits
+    merged_splits = []
+    nthr = 100000000
+    
+    it = iter(it)
+    i = 0
+    while True:    
+    
+        try:
+            current = next (it)
+        except StopIteration as e:
+            print(e)           
+            break      
+                    
+        while nhitsTOT[i] < nthr:
+            try:
+    
+    
+                current += next(it)
+                i = i +1
+    
+            except StopIteration as e:
+                print(e)           
+                break
+        
+        merged_splits.append(current)   
+        i = i +1
+    
+        
+    splits = merged_splits
+    niovs = len(splits)
+    
+    info = ak.unflatten(runs.EcalPhiSymInfo, splits, axis=0, behavior=runs.behavior).sum(axis=1)
+    ebhits = ak.unflatten(runs.EcalPhiSymEB, splits, axis=0, behavior=runs.behavior).sum(axis=1)
+    eehits = ak.unflatten(runs.EcalPhiSymEE, splits, axis=0, behavior=runs.behavior).sum(axis=1)
+
+niovs = len(splits)
+
 
 ## Compute k-factors
 #    - keep same definition as in Run2: the miscalibration values are centered at 0.
@@ -132,7 +175,7 @@ eflow = (((ebhits.sumet/sumEtEB)/norm)-1)/k.slope+1
 
 normW = ak.Array(np.repeat([ebhits.sumet[1]/sumEtEBw[1]], niovs, axis=0)) 
 eflowW = (((ebhits.sumet/sumEtEBw)/normW)-1)/k.slope+1
-print ()
+
 
 ## EFlow plots examples
 
@@ -140,7 +183,7 @@ formats = ['.png','.pdf']
 
 # plot of the laser corrections and eflow ics for some xstals
 for ixstal in range(0,62100,10000):
-    plt.scatter(info.fill[1:], eflow[1:,ixstal], label='ICs EFlow')
+    #plt.scatter(info.fill[1:], eflow[1:,ixstal], label='ICs EFlow')
     plt.scatter(info.fill[1:], eflowW[1:,ixstal], label='ICs EFlow W')
     plt.scatter(info.fill[1:], (ebhits.sumlc[1,ixstal]/ebhits.nhits[1,ixstal])/(ebhits.sumlc[1:,ixstal]/ebhits.nhits[1:,ixstal]), 
             label='1/Laser correction')
