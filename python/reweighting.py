@@ -14,7 +14,6 @@ plt.rcParams['xaxis.labellocation'] = 'right'
 plt.rcParams['yaxis.labellocation'] = 'top'
 plt.style.use(mplhep.style.ROOT)
 
-
 #parse arguments
 parser = parser = argparse.ArgumentParser()
 parser.add_argument("-p", "--phisym",    action="store",      type=str,     help="input ntuple for phisymetry")
@@ -26,24 +25,29 @@ phisymFile = args.phisym
 eopFile = args.eop
 
 #phisym = '../Run2018D_test.root'
-#eop = '../EGamma-Run2018B-ZSkim-17Sep2018-v1-316998-319312.root:selected'
+#eop = '../EGamma-Run2018B-ZSkim-17Sep2018-v1-316998-319312.root'
 
 # path to W/Z E/p - PhiSym 
+print  ("Opening Files")
 runs = NanoEventsFactory.from_root( phisymFile,
                                    schemaclass=EcalPhiSymSchema,
                                    treepath="/Runs").events()
-eop = uproot.open(eopFile)
+eop = uproot.open("%s:selected"%eopFile)
 
 counts = np.unique(runs.EcalPhiSymInfo.fill, return_index=True)[1]
 splits = np.diff(np.concatenate([counts, [len(runs.EcalPhiSymInfo.fill)]]))
-ebhits = ak.unflatten(runs.EcalPhiSymEB, splits, axis=0, behavior=runs.behavior).sum(axis=1)
 
+ebhits = ak.unflatten(runs.EcalPhiSymEB, splits, axis=0, behavior=runs.behavior).sum(axis=1)
 ak_eop = eop.arrays(filter_name = "/charge|eta/")
 
+print  ("doing phisym  histos")
 # ieat histo phisym
 hist_phisym,bins =np.histogram(ak.to_numpy(ebhits.ieta[1,:]), weights=ak.to_numpy(ebhits.sumet[1,:]), 
            bins=171, range=[-85.5, 85.5])
 hist_phisym = np.delete(hist_phisym, 85)
+
+
+print  ("doing Eop histos")
 
 # ieta histo eop
 hist_eop,bins =np.histogram(ak.to_numpy(ak.mask(ak_eop.etaEle[:,0], (ak_eop.chargeEle[:,0]  * ak_eop.chargeEle[:,1]  == 0)  , valid_when=False))/0.0175, bins=171, range=[-85.5, 85.5])

@@ -2,10 +2,10 @@ import os
 import awkward as ak
 import numpy as np
 import pandas as pd
+import uproot
 from coffea.nanoevents import NanoEventsFactory
 from ecalphisym import EcalPhiSymSchema
 import argparse 
-
 
 import matplotlib.pyplot as plt
 import mplhep
@@ -18,34 +18,34 @@ plt.style.use(mplhep.style.ROOT)
 
 #parse arguments
 parser = parser = argparse.ArgumentParser()
-parser.add_argument("-n", "--naod",    action="store",      type=str,     help="input minbias naod")
-parser.add_argument("-p", "--plots",    action="store",      type=str,  default="../MonitoringPlot_nomerging"    ,  help="output directory for plots")
-parser.add_argument("-i", "--ics",    action="store",      type=str,   default="../ICs"  ,   help="output directory for ics")
-parser.add_argument("--merge",  action=argparse.BooleanOptionalAction ,  help="merge fill with less hits than a thr")
-parser.add_argument("--savePlots",  action=argparse.BooleanOptionalAction ,  help="save or not the plots")
-parser.add_argument("--saveICs",   action=argparse.BooleanOptionalAction ,   help="save or not the ics") 
+parser.add_argument("-n", "--naod",    action="store",      type=str,     help="input minbias naod: .root format")
+parser.add_argument("-w", "--weights",    action="store",      type=str,     help="input weights: .txt format")
+parser.add_argument("-o", "--outputdir",    action="store",      type=str,   default="../results"  ,   help="output directory for ics")
+parser.add_argument("--iovref",    action="store",      type=int,   default=0  ,   help="reference iov to be normalized")
+parser.add_argument("--merge",  action='store_true' ,  help="merge fill with less hits than a thr")
+parser.add_argument("--savePlots",  action='store_true' ,  help="save or not the plots")
+parser.add_argument("--saveICs",   action='store_true' ,   help="save or not the ics") 
+parser.add_argument('--fileFormats' , dest='fileFormats'    ,  default='png', help='Output plot file formats (comma-separated png, pdf). Default "png"')
 
 args = parser.parse_args()
 
 naod = args.naod # '../Run2018D_test.root'
+outputdir =args.outputdir #"../ICs_testing"
 saveICs = args.saveICs
 savePlots = args.savePlots
 merge = args.merge
-
-
+weights = args.weights
+fileFormats = args.fileFormats.split(',')
+iovref = args.iovref
 
 # replace with proper test file location
 runs = NanoEventsFactory.from_root(naod,
-                                   schemaclass=EcalPhiSymSchema,
-                                   treepath="/Runs").events()
+                               schemaclass=EcalPhiSymSchema,
+                               treepath="/Runs").events()
 
-#replace with the correct folder output location
-outputPlot = args.plots #"../MonitoringPlot"
-outputICs =args.ics #"../ICs"
 
-folders = [outputPlot, outputICs]
-for folder in folders:
-    os.makedirs(folder, exist_ok=True)   
+# create the outputdir
+os.makedirs(outputdir, exist_ok=True)   
 
 ## Group data by fill number
 #    - Prepare the grouping 
@@ -57,6 +57,8 @@ splits = np.diff(np.concatenate([counts, [len(runs.EcalPhiSymInfo.fill)]]))
 info = ak.unflatten(runs.EcalPhiSymInfo, splits, axis=0, behavior=runs.behavior).sum(axis=1)
 ebhits = ak.unflatten(runs.EcalPhiSymEB, splits, axis=0, behavior=runs.behavior).sum(axis=1)
 eehits = ak.unflatten(runs.EcalPhiSymEE, splits, axis=0, behavior=runs.behavior).sum(axis=1)
+
+niovs = len(splits)
 
 # try to put togheter fills with less stats
 if merge:
@@ -98,7 +100,6 @@ if merge:
     ebhits = ak.unflatten(runs.EcalPhiSymEB, splits, axis=0, behavior=runs.behavior).sum(axis=1)
     eehits = ak.unflatten(runs.EcalPhiSymEE, splits, axis=0, behavior=runs.behavior).sum(axis=1)
 
-niovs = len(splits)
 
 
 ## Compute k-factors
@@ -115,26 +116,42 @@ k = ak.linear_fit(info.miscalibs_eb, ebhits.sumet_v, axis=2)
 # k-factor histo
 plt.hist(ak.flatten(k.slope), bins=1000, range=[0,4])
 plt.xlabel('k-factor')
-plt.show()
+plt.clf()
+plt.close()
+
+
 
 plt.hist(ak.flatten(k.intercept), bins=1000, range=[-0.1, 0.1])
 plt.xlabel('fit intercept')
-plt.show()
+plt.clf()
+plt.close()
+
+
 
 # k-factor vs fill
 plt.scatter(info.fill, k.slope[:,100])
 plt.xlabel('Fill Number')
 plt.ylabel('k-factor')
-plt.show()
+if savePlots: 
+    for form in fileFormats:
+        plt.savefig("%s/kfactorVSfill.%s"%(outputdir, form))
+plt.clf()
+plt.close()
+
 
 # k-factor map
-plt.hist2d(ak.to_numpy(ebhits.iphi[1,:]), ak.to_numpy(ebhits.ieta[1,:]), weights=ak.to_numpy(k.slope[1]), 
+plt.hist2d(ak.to_numpy(ebhits.iphi[iovref,:]), ak.to_numpy(ebhits.ieta[iovref,:]), weights=ak.to_numpy(k.slope[iovref]), 
            bins=[360, 171], range=[[0.5,360.5], [-85.5, 85.5]], 
            cmap='cividis', cmin=2, cmax=3)
 plt.xlabel('i $\phi$')
 plt.ylabel('i $\eta$')
 plt.title('k-factor')
-plt.show()
+if savePlots: 
+    for form in fileFormats:
+        plt.savefig("%s/map_kfactor.%s"%(outputdir, form))
+plt.clf()
+plt.close()
+
 
 ## Compute EFlow
 #    - remove boundary channels (SM and module boundaries) from the total EB sum
@@ -158,7 +175,7 @@ def boundaryCrystals(data):
 
 ### Weights to match eta ele distribution
 
-with open('weight.txt') as file:
+with open(weights) as file:
     weights = np.loadtxt(file)
 
 # repeated for 360 xstals and for the number of iovs
@@ -168,35 +185,34 @@ ws = ak.Array([ws] * niovs)
 sumEtEB = ak.sum(ak.mask(ebhits.sumet, boundaryCrystals(ebhits), valid_when=False), axis=1)
 sumEtEBw = ak.mean(ak.mask(ebhits.sumet, boundaryCrystals(ebhits), valid_when=False), weight = ws ,  axis=1)
 
-### Eflow ICs normalized to first IOV
+### Eflow ICs normalized to ref IOV
 
-norm = ak.Array(np.repeat([ebhits.sumet[1]/sumEtEB[1]], niovs, axis=0)) 
+norm = ak.Array(np.repeat([ebhits.sumet[iovref]/sumEtEB[iovref]], niovs, axis=0)) 
 eflow = (((ebhits.sumet/sumEtEB)/norm)-1)/k.slope+1
 
-normW = ak.Array(np.repeat([ebhits.sumet[1]/sumEtEBw[1]], niovs, axis=0)) 
+normW = ak.Array(np.repeat([ebhits.sumet[iovref]/sumEtEBw[iovref]], niovs, axis=0)) 
 eflowW = (((ebhits.sumet/sumEtEBw)/normW)-1)/k.slope+1
 
 
 ## EFlow plots examples
 
-formats = ['.png','.pdf']
-
 # plot of the laser corrections and eflow ics for some xstals
 for ixstal in range(0,62100,10000):
-    #plt.scatter(info.fill[1:], eflow[1:,ixstal], label='ICs EFlow')
-    plt.scatter(info.fill[1:], eflowW[1:,ixstal], label='ICs EFlow W')
-    plt.scatter(info.fill[1:], (ebhits.sumlc[1,ixstal]/ebhits.nhits[1,ixstal])/(ebhits.sumlc[1:,ixstal]/ebhits.nhits[1:,ixstal]), 
+    plt.clf()
+    plt.scatter(info.fill[iovref:], eflow[iovref:,ixstal], label='ICs EFlow')
+    plt.scatter(info.fill[iovref:], eflowW[iovref:,ixstal], label='ICs EFlow W')
+    plt.scatter(info.fill[iovref:], (ebhits.sumlc[iovref,ixstal]/ebhits.nhits[iovref,ixstal])/(ebhits.sumlc[iovref:,ixstal]/ebhits.nhits[iovref:,ixstal]), 
             label='1/Laser correction')
     plt.legend()
     plt.xlabel('Fill number')
     plt.ylabel('Relative response')
-    plt.title("i$\eta$ = "+str(int(ebhits.ieta[1,ixstal]))+"  i$\phi$ = "+str(ebhits.iphi[1,ixstal]))
+    plt.title('i$\eta$ = %i i$\phi$ = %i'%(int(ebhits.ieta[iovref,ixstal]), ebhits.iphi[iovref,ixstal]))
     plt.grid()
     if savePlots: 
-        for form in formats:
-            plt.savefig(outputPlot+'/monitoring_ieta'+str(int(ebhits.ieta[1,ixstal]))+'_iphi'+str(int(ebhits.iphi[1,ixstal]))+form)
-
-    plt.show()
+        for form in fileFormats:
+            plt.savefig('%s/monitoring_ieta%i_iphi%i.%s'%(outputdir, ebhits.ieta[iovref,ixstal], ebhits.iphi[iovref,ixstal], form))
+    plt.clf()
+    plt.close()
 
 # plot the map of the last iov
 plt.hist2d(ak.to_numpy(ebhits.iphi[-1,:]), ak.to_numpy(ebhits.ieta[-1,:]), weights=ak.to_numpy(eflow[-1]), 
@@ -205,14 +221,12 @@ plt.hist2d(ak.to_numpy(ebhits.iphi[-1,:]), ak.to_numpy(ebhits.ieta[-1,:]), weigh
 plt.xlabel('i $\phi$')
 plt.ylabel('i $\eta$')
 plt.title('EFlow ICs')
-
 plt.colorbar()
 if savePlots: 
-    fillnum = str(info.fill[-1]).replace("[","").replace("]","")
-    for form in formats:
-        plt.savefig(outputPlot+'/mapICs_fill'+fillnum+form)
-plt.show()
-
+    for form in fileFormats:
+        plt.savefig('%s/mapICs_fill%s.%s'%(outputdir, str(info.fill[-1]).replace("[","").replace("]",""), form))
+plt.clf()
+plt.close()
 
 # plot the map of the last iov eflow Weighted
 plt.hist2d(ak.to_numpy(ebhits.iphi[-1,:]), ak.to_numpy(ebhits.ieta[-1,:]), weights=ak.to_numpy(eflowW[-1]), 
@@ -221,13 +235,15 @@ plt.hist2d(ak.to_numpy(ebhits.iphi[-1,:]), ak.to_numpy(ebhits.ieta[-1,:]), weigh
 plt.xlabel('i $\phi$')
 plt.ylabel('i $\eta$')
 plt.title('EFlow ICs')
-
 plt.colorbar()
+
 if savePlots: 
     fillnum = str(info.fill[-1]).replace("[","").replace("]","")
-    for form in formats:
-        plt.savefig(outputPlot+'/mapICsW_fill'+fillnum+form)
-plt.show()
+    for form in fileFormats:
+        plt.savefig('%s/mapICsW_fill%s.%s'%(outputdir, fillnum, form))
+plt.clf()
+plt.close()
+
 
 ### ICs saved in the correct format
 
@@ -235,12 +251,12 @@ plt.show()
 # One folder is created for each IOV
 # Passing trough PD
 if saveICs:
-    for ifill in range(1,len(info.fill)):
+    for ifill in range(iovref,len(info.fill)):
         tosave = pd.concat ([ak.to_pandas(ebhits[ifill].ieta).astype(int), ak.to_pandas(ebhits[ifill].iphi), ak.to_pandas(ebhits[ifill].zside()).astype(int), ak.to_pandas(eflowW[ifill])], axis = 1)
         tosave[''] = 0 
         tosave.fillna(1, inplace=True)
-        os.makedirs(outputICs+"/"+str(info.fill[ifill]).replace("[","").replace("]",""), exist_ok=True)   
-        tosave.to_csv(outputICs+"/"+str(info.fill[ifill]).replace("[","").replace("]","")+"/file.txt", " ", float_format='%.6f', index=False, header=False)
+        os.makedirs('%s/%s'%(outputdir, str(info.fill[ifill]).replace("[","").replace("]","")), exist_ok=True)   
+        tosave.to_csv('%s/%s/file.txt'%(outputdir, str(info.fill[ifill]).replace("[","").replace("]","")), float_format='%.6f', index=False, header=False)
         
 
         
