@@ -8,6 +8,7 @@ from ecalautoctrl import RunCtrl
 from coffea.processor import AccumulatorABC, ProcessorABC, Runner, FuturesExecutor
 import argparse
 import os,sys
+import time
 from EcalPhiSymProcessor import EcalPhiSymAccumulator, Processor
 #%matplotlib inline
 plt.rc('font',**{'family':'sans-serif', 'sans-serif':['Helvetica'], 'size':'20'})
@@ -94,14 +95,15 @@ idx = ak.argsort(runs)
 
 # requiring at least nhistmin for each IOV
 runs_merged = [runs[idx][0]]
-counts_merged = []
+counts_merged = [0]
 nhits = 0
+print (len(hitseb[idx]))
 for i, hits in enumerate(hitseb[idx]):
    
-   if args.verbosity >= 2: print( "Fill: %i and Run: %i"%( fills[idx][i], runs[idx][i]),  "\n hits here %i -- n hits before %i"%(hits , nhits))
-   nhits += hits
+    if args.verbosity >= 2: print( "Fill: %i and Run: %i"%( fills[idx][i], runs[idx][i]),  "\n hits here %i -- n hits before %i"%(hits , nhits))
+    nhits += hits
 
-   if nhits >= nhitsmin:
+    if nhits >= nhitsmin:
        if args.verbosity >= 2: print (">>>>> At idx %i --> min hits achieved == %i"%(i, nhits))
        nhits = 0
 
@@ -110,7 +112,7 @@ for i, hits in enumerate(hitseb[idx]):
        runs_merged.append(runs[idx][i+1])
 
 counts_merged = np.array(counts_merged)
-splits_merged = np.diff(np.concatenate([[0], counts_merged, [len(runs)]]))
+splits_merged = np.diff(np.concatenate([ counts_merged, [len(runs)]]))
 
 if args.verbosity >= 2:  print ("So this are the counts merged:: \n  ", counts_merged , "\n", "These are the final splits: \n ", splits_merged)
 
@@ -149,7 +151,7 @@ plt.savefig("%s/kslopeVSrun.png"%outputdir)
 plt.clf()
 plt.close()
 
-plt.hist2d(ak.to_numpy(ebhits.iphi[1,:]), ak.to_numpy(ebhits.ieta[1,:]), weights=ak.to_numpy(k.slope[1]), 
+plt.hist2d(ak.to_numpy(ebhits.iphi[iovref,:]), ak.to_numpy(ebhits.ieta[iovref,:]), weights=ak.to_numpy(k.slope[iovref]), 
            bins=[360, 171], range=[[0.5,360.5], [-85.5, 85.5]], 
            cmap='viridis', cmin=2, cmax=3)
 
@@ -179,7 +181,6 @@ with open(weights) as file:
 # repeated for 360 xstals and for the number of iovs
 ws = ak.flatten(ak.Array([[w] * 360 for w in weights]))
 ws = ak.Array([ws] * niovs) 
-
 
 
 #Deriving the corrections
@@ -219,12 +220,15 @@ sumEtEB_w = ak.mean(ak.mask(ebhits.sumet, boundaryCrystals(ebhits), valid_when=F
 norm_w = ak.Array(np.repeat([ebhits.sumet[iovref]/sumEtEB_w[iovref]], niovs, axis=0)) 
 eflow_w = (((ebhits.sumet/sumEtEB_w)/norm_w)-1)/k.slope+1
 
-
+start = time.time()
 #Plotting
 if args.verbosity >= 1: print ("... plotting ...") 
 
-for icry in [500]:
+for icry in range(0,61200,100):
     #icry=500
+    if (ebhits.status[iovref,icry] != 0): 
+        if args.verbosity >= 1: print ("Bad xstal i$\eta$ = %i i$\phi$ = %i ---> Skipping "%(ebhits.ieta[iovref,icry],ebhits.iphi[iovref,icry]) )
+        continue
     plt.scatter(runs_merged[iovref:], eflow[iovref:,icry], label='EFlow')
     plt.scatter(runs_merged[iovref:], eflow_w[iovref:,icry], label='EFlow weighted')
     plt.scatter(runs_merged[iovref:], (ebhits.sumlc[iovref,icry]/ebhits.nhits[iovref,icry])/(ebhits.sumlc[iovref:,icry]/ebhits.nhits[iovref:,icry]), 
@@ -237,6 +241,10 @@ for icry in [500]:
     plt.savefig("%s/history_IEta_%i_IPhi_%i.png"%(outputdir,ebhits.ieta[iovref,icry], ebhits.iphi[iovref,icry]))
     plt.clf()
     plt.close()
+
+end = time.time()
+
+if args.verbosity >= 2: print ("How much does it takes???", (end - start) , "s")
 
 
 # plot the map of the last run
