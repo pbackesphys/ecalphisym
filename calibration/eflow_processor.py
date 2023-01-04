@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import mplhep
 from coffea.nanoevents import NanoEventsFactory
 from ecalphisym import EcalPhiSymSchema
-#from ecalautoctrl import RunCtrl
+from ecalautoctrl import RunCtrl
 from coffea.processor import AccumulatorABC, ProcessorABC, Runner, FuturesExecutor
 import argparse
 import os,sys
@@ -39,36 +39,41 @@ weights = args.weights
 iovref = args.iovref
 nhitsmin = args.nhits
 
-# get files from ecalautomation
-# need to define a processor (above)
-# and an accumulator function (above)
-# to read multiple files in coffea and sum above the interesting infos
-#rctrl = RunCtrl(dbname=dbname, campaign=campaign)
+# create the outputdir
+os.makedirs(outputdir, exist_ok=True)   
+
+
+"""
+    Get files from ecalautomation.
+    Need to define a processor (EcalPhiSymProcessor.py)
+    and an accumulator function (EcalPhiSymProcessor.py)
+    to read multiple files in coffea and sum above the interesting infos
+"""
+
+rctrl = RunCtrl(dbname=dbname, campaign=campaign)
 #fileset = {'PhiSym' : ['root://eoscms.cern.ch/'+f for f in rctrl.getOutput(era='Run2022E', process='phisym-reco')]}
 #fileset = {'PhiSym' : [f for f in rctrl.getOutput(era='Run2022E', process='phisym-reco')]}
 #fileset = {'PhiSym' : ['phisymreco_nano_0.root','phisymreco_nano_1.root']}
-#fileset =  {}
-#for era in eras:
-#    fileset[era] = [f for f in rctrl.getOutput(era=era, process='phisym-reco')]
-#if args.verbosity >= 1:
-    #print("Running on these files: ")
-    #print(fileset)
-#sys.exit()
-
-
+fileset =  {}
+for era in eras:
+    fileset[era] = [f for f in rctrl.getOutput(era=era, process='phisym-reco')]
+if args.verbosity >= 1:
+   print("Running on these files: ")
+   print(fileset)
 
 
 
 
 # parsing data from a txt (just for testing)
-import ast
-with open("dictionaryFilesC.txt", "r") as data:
-    fileset = ast.literal_eval(data.read())
+#import ast
+#with open("dictionaryFilesC.txt", "r") as data:
+#    fileset = ast.literal_eval(data.read())
 #fileset = {'PhiSym': ['/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation_prompt/phisym/356489/phisymreco_nano_1.root', 
 #                      '/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation_prompt/phisym/356951/phisymreco_nano_0.root', 
 #                      '/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation_prompt/phisym/356969/phisymreco_nano_0.root',
 #                      '/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation_prompt/phisym/356469/phisymreco_nano_0.root']}
 #print( fileset)
+
 iterative_run = Runner(
     executor = FuturesExecutor(compression=None, workers=4),
     schema=EcalPhiSymSchema
@@ -79,7 +84,6 @@ out = iterative_run(
     processor_instance=Processor(),
 )
 
-# all the
 #print ("These are the magic runs ;D ") 
 #print (out.run) 
 
@@ -110,20 +114,8 @@ splits_merged = np.diff(np.concatenate([[0], counts_merged, [len(runs)]]))
 
 if args.verbosity >= 2:  print ("So this are the counts merged:: \n  ", counts_merged , "\n", "These are the final splits: \n ", splits_merged)
 
-## Just divide by run (not so much statistics!)
-#counts = np.unique(runs[idx], return_index=True)[1]
-#splits = np.diff(np.concatenate([counts, [len(runs)]]))
-#print ("So this are the counts::  ")
-#print (counts)
-#print ("These are the splits::     ")
-#print (splits)
-
 splits = splits_merged
 niovs = len (splits_merged)
-# Now taking the first Run for each IOV
-#for i in counts_merged:
-#    runs_merged.append(runs[idx][i])
-#runs_merged = np.array(runs_merged)
 
 if args.verbosity >= 1: print ("Diveded in %i IOVS --> These are the initial runs of the IOV: \n"%len(runs_merged), runs_merged)
 
@@ -159,7 +151,7 @@ plt.close()
 
 plt.hist2d(ak.to_numpy(ebhits.iphi[1,:]), ak.to_numpy(ebhits.ieta[1,:]), weights=ak.to_numpy(k.slope[1]), 
            bins=[360, 171], range=[[0.5,360.5], [-85.5, 85.5]], 
-           cmap='cividis', cmin=2, cmax=3)
+           cmap='viridis', cmin=2, cmax=3)
 
 plt.colorbar()
 plt.savefig("%s/map_kslope.png"%outputdir)
@@ -172,10 +164,10 @@ def boundaryCrystals(data):
     Flag crystals on module boundaries:
     - first and last crystals in a SM along phi (iphi % 20 == 0|1)
     - first and last crystals in a module along eta (|ieta| = 1, 25,26, 45,46, 65,66, 85)
-   ts.iphi[-1,:] """
+    """
 
     bounds = ak.zeros_like(data.ieta)
-    for idx in [1, 25, 25, 45, 46, 65, 66, 85]:
+    for idx in [1, 25, 26, 45, 46, 65, 66, 85]:
         bounds = bounds + (abs(data.ieta) == idx)
         
     return (data.iphi % 20 == 0) | (data.iphi % 20 == 1) | (bounds > 0)
@@ -193,6 +185,31 @@ ws = ak.Array([ws] * niovs)
 #Deriving the corrections
 if args.verbosity >= 1: print ("Deriving the corrections...") 
 
+sumEtRing = []
+######## IMPLEMENTIG normalization per Ring
+#for iRing in range(-85,86):
+#    sumEtRing.append( ak.sum(ak.mask(ebhits.sumet, ebhits.ieta == iRing, valid_when=True), axis=1)) # sum 
+#
+#sumEtRing.pop(85)
+#print()
+#
+#print (sumEtRing)
+##print (sumEtRing)
+#print (len(sumEtRing))
+#
+#
+#sys.exit()
+#norm_ring = ak.Array(np.repeat([ebhits.sumet[iovref]/sumEtRing[iovref]], len(ebhits.sumet), axis=0))
+#phisym = (((ebhits.sumet/sumEtRing)/norm_ring)-1)/k.slope+1
+#
+##        icChEB[index] = 1/((ebXstals_[index].GetSumEt(0)/
+##                            ebRingsSumEt_[currentRing][0]-1)/GetChannelKfactor(index, 0).first+1);
+#
+#norm = ak.Array(np.repeat([ebhits.sumet[iovref]/sumEtEB[iovref]], len(ebhits.sumet), axis=0))
+#eflow = (((ebhits.sumet/sumEtEB)/norm)-1)/k.slope+1
+
+
+
 sumEtEB = ak.sum(ak.mask(ebhits.sumet, boundaryCrystals(ebhits), valid_when=False), axis=1) # sum 
 norm = ak.Array(np.repeat([ebhits.sumet[iovref]/sumEtEB[iovref]], len(ebhits.sumet), axis=0))
 eflow = (((ebhits.sumet/sumEtEB)/norm)-1)/k.slope+1
@@ -205,25 +222,27 @@ eflow_w = (((ebhits.sumet/sumEtEB_w)/norm_w)-1)/k.slope+1
 
 #Plotting
 if args.verbosity >= 1: print ("... plotting ...") 
-icry=500
-plt.scatter(runs_merged[iovref:], eflow[iovref:,icry], label='EFlow')
-plt.scatter(runs_merged[iovref:], eflow_w[iovref:,icry], label='EFlow weighted')
-plt.scatter(runs_merged[iovref:], (ebhits.sumlc[iovref,icry]/ebhits.nhits[iovref,icry])/(ebhits.sumlc[iovref:,icry]/ebhits.nhits[iovref:,icry]), 
-            label='1/Laser correction')
-plt.legend()
-plt.grid()
-plt.xlabel('Intial run number of IOV')
-plt.ylabel('Relative response')
-plt.title('Crystal i$\eta$ = %i i$\phi$ = %i'%(ebhits.ieta[iovref,icry],ebhits.iphi[iovref,icry]))
-plt.savefig("%s/history_IEta_%i_IPhi_%i.png"%(outputdir,ebhits.ieta[iovref,icry], ebhits.iphi[iovref,icry]))
-plt.clf()
-plt.close()
+
+for icry in [500]:
+    #icry=500
+    plt.scatter(runs_merged[iovref:], eflow[iovref:,icry], label='EFlow')
+    plt.scatter(runs_merged[iovref:], eflow_w[iovref:,icry], label='EFlow weighted')
+    plt.scatter(runs_merged[iovref:], (ebhits.sumlc[iovref,icry]/ebhits.nhits[iovref,icry])/(ebhits.sumlc[iovref:,icry]/ebhits.nhits[iovref:,icry]), 
+                label='1/Laser correction')
+    plt.legend()
+    plt.grid()
+    plt.xlabel('Intial run number of IOV')
+    plt.ylabel('Relative response')
+    plt.title('Crystal i$\eta$ = %i i$\phi$ = %i'%(ebhits.ieta[iovref,icry],ebhits.iphi[iovref,icry]))
+    plt.savefig("%s/history_IEta_%i_IPhi_%i.png"%(outputdir,ebhits.ieta[iovref,icry], ebhits.iphi[iovref,icry]))
+    plt.clf()
+    plt.close()
 
 
 # plot the map of the last run
 plt.hist2d(ak.to_numpy(ebhits.iphi[-1,:]), ak.to_numpy(ebhits.ieta[-1,:]), weights=ak.to_numpy(eflow[-1]), 
            bins=[360, 171], range=[[0.5,360.5], [-85.5, 85.5]], 
-           cmap='seismic', cmin=0.9, cmax=1.1)
+           cmap='viridis', cmin=0.9, cmax=1.1)
 plt.colorbar()
 plt.xlabel('i $\phi$')
 plt.ylabel('i $\eta$')
@@ -235,7 +254,7 @@ plt.close()
 # plot the map of the last run
 plt.hist2d(ak.to_numpy(ebhits.iphi[-1,:]), ak.to_numpy(ebhits.ieta[-1,:]), weights=ak.to_numpy(eflow_w[-1]), 
            bins=[360, 171], range=[[0.5,360.5], [-85.5, 85.5]], 
-           cmap='seismic', cmin=0.9, cmax=1.1)
+           cmap='viridis', cmin=0.9, cmax=1.1)
 plt.colorbar()
 plt.xlabel('i $\phi$')
 plt.ylabel('i $\eta$')
