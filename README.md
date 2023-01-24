@@ -14,12 +14,32 @@ pip install git+https://github.com/simonepigazzini/ecalphisym.git
 An easy way to install and test is to create a dedicated conda environment
 
 ```
-conda create -n phisym python==3.10
+conda create -n phisym python==3.9
 conda activate phisym
 pip install git+https://github.com/simonepigazzini/ecalphisym.git
 ```
 
-### Using docker image
+Moreover, you need the ecal-automation package to read the phisym nAOD with the pytools:
+```
+pip install git+https://gitlab.cern.ch/cms-ecal-dpg/ECALELFS/automation-control.git
+```
+
+Then just get the calibration codes (in this repo calibration folder) and run them.
+Below instructions to run the calibration codes.
+
+
+### Using docker image 
+#### Recommended
+
+Clone the github repository to get the calibration code.
+
+```
+git clone git@github.com:flaviacetorelli/ecalphisym.git
+```
+
+Then set up the docker image and run the code in the image.
+To see how to run the calibration code, read below.
+
 
 ```
 set -x APPTAINER_CACHEDIR "/tmp/"(whoami)"/singularity"
@@ -31,6 +51,7 @@ source /home/ecalgit/setup.sh
 Codes are in the calibration folder.
 
 First python script reweighting_processor.py is used to calculate the eta-weight to compare and match the eta-distribution of the MinBias events to the eta distribution of the electrons from W-Z.
+No needed in case you only want to study the history of individual crystals.
 
 To run:
 ```
@@ -44,8 +65,8 @@ To run it:
 ```
 python3 eflow_processor.py --dbname ecal_prompt_v1 --campaign prompt --eras Run2022C,Run2022D -w PATH/weights.txt -o OUTPUTDIR 
 ```
-Where dbname, campaign, and eras are needed to catch files with the pytools, -w specify the path weight file from the previous step, -o the output directory.
-Moreover, --savePlots option saves the history plots of some crystals.
+Where dbname, campaign, and eras are needed to catch files with the pytools, -w specify the path weight file from the previous step (if not given, the eflow ics are calculated without the eta-weights), -o the output directory.
+Moreover, --savePlots option saves the history plots of some crystals to check everything is fine.
 
 
 
