@@ -25,7 +25,7 @@ parser = parser = argparse.ArgumentParser()
 parser.add_argument("--dbname",          action="store",      type=str,                         help="dbname:: to retrieve files from ecalutomation, see doc")  
 parser.add_argument("--campaign",        action="store",      type=str,                         help="campaing:: to retrieve files from ecalutomation, see doc")  
 parser.add_argument("--eras",            action="store",      type=str,                         help="eras:: to retrieve files from ecalutomation, see doc")  
-parser.add_argument("-w", "--weights",   action="store",      type=str,                         help="input weights: .txt format")
+parser.add_argument("-w", "--weights",   action="store",      type=str,   default="",           help="input eta weights: .txt format; in default mode calculate eflow wo eta weights")
 parser.add_argument("--iovref",          action="store",      type=int,   default=0,            help="reference iov to be normalized")
 parser.add_argument("--nhits",           action="store",      type=int,   default=3000000000,   help="value of minimum nhits per iov")
 parser.add_argument("-o", "--outputdir", action="store",      type=str,   default="../results", help="output directory for ics")
@@ -41,6 +41,9 @@ outputdir =args.outputdir #"../ICs_testing"
 weights = args.weights
 iovref = args.iovref
 nhitsmin = args.nhits
+
+
+doWeightedMean = False #bool to perform or not eta-weighted average
 
 # create the outputdir
 os.makedirs(outputdir, exist_ok=True)   
@@ -183,14 +186,6 @@ def boundaryCrystals(data):
         
     return (data.iphi % 20 == 0) | (data.iphi % 20 == 1) | (bounds > 0)
 
-# Opening the files with the eta-weights
-with open(weights) as file:
-    weights = np.loadtxt(file)
-
-# repeated for 360 xstals and for the number of iovs
-ws = ak.flatten(ak.Array([[w] * 360 for w in weights]))
-ws = ak.Array([ws] * niovs) 
-
 
 #Deriving the corrections
 if args.verbosity >= 1: print ("Deriving the corrections...") 
@@ -225,9 +220,23 @@ norm = ak.Array(np.repeat([ebhits.sumet[iovref]/sumEtEB[iovref]], len(ebhits.sum
 eflow = (((ebhits.sumet/sumEtEB)/norm)-1)/k.slope+1
 
 
-sumEtEB_w = ak.mean(ak.mask(ebhits.sumet, boundaryCrystals(ebhits), valid_when=False), weight = ws ,  axis=1) # weighted average
-norm_w = ak.Array(np.repeat([ebhits.sumet[iovref]/sumEtEB_w[iovref]], niovs, axis=0)) 
-eflow_w = (((ebhits.sumet/sumEtEB_w)/norm_w)-1)/k.slope+1
+# Opening the files with the eta-weights
+if not weights == "":
+
+    if args.verbosity >= 1: print ("Eta Weight file provided ...") 
+    
+    doWeightedMean = True
+    with open(weights) as file:
+        weights = np.loadtxt(file)
+    
+    # repeated for 360 xstals and for the number of iovs
+    ws = ak.flatten(ak.Array([[w] * 360 for w in weights]))
+    ws = ak.Array([ws] * niovs) 
+
+    sumEtEB_w = ak.mean(ak.mask(ebhits.sumet, boundaryCrystals(ebhits), valid_when=False), weight = ws ,  axis=1) # weighted average
+    norm_w = ak.Array(np.repeat([ebhits.sumet[iovref]/sumEtEB_w[iovref]], niovs, axis=0)) 
+    eflow_w = (((ebhits.sumet/sumEtEB_w)/norm_w)-1)/k.slope+1
+
 
 start = time.time()
 if args.verbosity >= 1: print ("... saving histories in .root ...") 
@@ -241,6 +250,11 @@ with  uproot.recreate("%s/history.root"%outputdir) as file:
             "iphi"    : [ebhits.iphi[iov,:]   for iov in range(0,niovs)],
             "run_i"   : [runs_merged_i[iov]   for iov in range(0,niovs)],
             "run_f"   : [runs_merged_f[iov]   for iov in range(0,niovs)],
+            "status"  : [ebhits.status[iov,:] for iov in range(0,niovs)],
+            "norm"    : [norm[iov,:]          for iov in range(0,niovs)],
+            "kfact"   : [k.slope[iov,:]       for iov in range(0,niovs)],
+            "sumEtB"  : [sumEtEB[iov]         for iov in range(0,niovs)],
+            "sumEt"   : [ebhits.sumet[iov,:]  for iov in range(0,niovs)],
             "eflow"   : [eflow[iov,:]         for iov in range(0,niovs)],
             #"eflow_w" : [eflow_w[iov,:]       for iov in range(0,niovs)],
     
@@ -260,7 +274,7 @@ if args.savePlots:
             if args.verbosity >= 1: print ("Bad xstal i$\eta$ = %i i$\phi$ = %i ---> Skipping "%(ebhits.ieta[iovref,icry],ebhits.iphi[iovref,icry]) )
             continue
         plt.scatter(runs_merged_i[iovref:], eflow[iovref:,icry], label='EFlow')
-        plt.scatter(runs_merged_i[iovref:], eflow_w[iovref:,icry], label='EFlow weighted')
+        if doWeightedMean: plt.scatter(runs_merged_i[iovref:], eflow_w[iovref:,icry], label='EFlow weighted')
         plt.scatter(runs_merged_i[iovref:], (ebhits.sumlc[iovref,icry]/ebhits.nhits[iovref,icry])/(ebhits.sumlc[iovref:,icry]/ebhits.nhits[iovref:,icry]), 
                     label='1/Laser correction')
         plt.legend()
@@ -285,18 +299,19 @@ if args.savePlots:
     plt.savefig("%s/ICmap2d_Run%i.png"%(outputdir,runs_merged_i[-1]))
     plt.clf()
     plt.close()
-    
-    # plot the map of the last run
-    plt.hist2d(ak.to_numpy(ebhits.iphi[-1,:]), ak.to_numpy(ebhits.ieta[-1,:]), weights=ak.to_numpy(eflow_w[-1]), 
-               bins=[360, 171], range=[[0.5,360.5], [-85.5, 85.5]], 
-               cmap='viridis', cmin=0.9, cmax=1.1)
-    plt.colorbar()
-    plt.xlabel('i $\phi$')
-    plt.ylabel('i $\eta$')
-    plt.title('EFlow ICs weighted')
-    plt.savefig("%s/ICweighted_map2d_Run%i.png"%(outputdir,runs_merged_i[-1]))
-    plt.clf()
-    plt.close()
+
+    if doWeightedMean:
+        # plot the map of the last run
+        plt.hist2d(ak.to_numpy(ebhits.iphi[-1,:]), ak.to_numpy(ebhits.ieta[-1,:]), weights=ak.to_numpy(eflow_w[-1]), 
+                   bins=[360, 171], range=[[0.5,360.5], [-85.5, 85.5]], 
+                   cmap='viridis', cmin=0.9, cmax=1.1)
+        plt.colorbar()
+        plt.xlabel('i $\phi$')
+        plt.ylabel('i $\eta$')
+        plt.title('EFlow ICs weighted')
+        plt.savefig("%s/ICweighted_map2d_Run%i.png"%(outputdir,runs_merged_i[-1]))
+        plt.clf()
+        plt.close()
 
 
 
@@ -309,7 +324,10 @@ import pandas as pd
 # One folder is created for each IOV
 # Passing trough PD
 for i,irun in enumerate(runs_merged_i):
-     tosave = pd.concat ([ak.to_pandas(ebhits[i].ieta).astype(int), ak.to_pandas(ebhits[i].iphi), ak.to_pandas(ebhits[i].zside()).astype(int), ak.to_pandas(eflow_w[i])], axis = 1)
+     if doWeightedMean:
+         tosave = pd.concat ([ak.to_pandas(ebhits[i].ieta).astype(int), ak.to_pandas(ebhits[i].iphi), ak.to_pandas(ebhits[i].zside()).astype(int), ak.to_pandas(eflow_w[i])], axis = 1)
+     else:
+         tosave = pd.concat ([ak.to_pandas(ebhits[i].ieta).astype(int), ak.to_pandas(ebhits[i].iphi), ak.to_pandas(ebhits[i].zside()).astype(int), ak.to_pandas(eflow[i])], axis = 1)
      tosave[''] = 0 
      tosave.fillna(1, inplace=True)
      os.makedirs('%s/%s'%(outputdir, str(irun).replace("[","").replace("]","")), exist_ok=True)   
