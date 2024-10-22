@@ -23,8 +23,8 @@ class Info:
         """
         # linspace requires an integer singleton
         # while nmis is an array (one int per Run/LuminosityBlock        
-        return np.linspace(ak.broadcast_arrays(self.minmiseb, np.ones(61200))[0]-1,
-                           ak.broadcast_arrays(self.maxmiseb, np.ones(61200))[0]-1,
+        return np.linspace(ak.broadcast_arrays(self.minmiseb.to_numpy(), np.ones(61200))[0]-1,
+                           ak.broadcast_arrays(self.maxmiseb.to_numpy(), np.ones(61200))[0]-1,
                            int(ak.mean(self.nmis))+1,
                            axis=-1)
     
@@ -62,6 +62,27 @@ class Info:
             'fill': ak.min(self.fill, axis=axis),
             'reclumi': ak.sum(self.reclumi, axis=axis),
             'delivlumi': ak.sum(self.delivlumi, axis=axis)
+        }
+        return ak.zip(
+            data,
+            with_name='Info'
+        )
+
+    def add(self, other):
+        """Add a new info to existing one, not in place"""
+        data = {
+            'maxmiseb': other.maxmiseb,
+            'maxmisee': other.maxmisee,
+            'minmiseb': other.minmiseb,
+            'minmisee': other.minmisee,
+            'nmis': other.nmis,
+            'hitseb': self.hitseb + other.hitseb,
+            'hitsee': self.hitsee + other.hitsee,
+            'nevents': self.nevents + other.nevents,
+            'nlumis': self.nlumis + other.nlumis,
+            'fill': ak.min(other.fill),
+            'reclumi': self.reclumi + other.reclumi,
+            'delivlumi': self.delivlumi + other.delivlumi
         }
         return ak.zip(
             data,
