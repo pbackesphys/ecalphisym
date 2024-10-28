@@ -20,7 +20,7 @@ plt.style.use(mplhep.style.ROOT)
 parser = parser = argparse.ArgumentParser()
 parser.add_argument("-n", "--naod",    action="store",      type=str,     help="input minbias naod: .root format")
 parser.add_argument("-w", "--weights",    action="store",      type=str,     help="input weights: .txt format")
-parser.add_argument("-o", "--outputdir",    action="store",      type=str,   default="../results"  ,   help="output directory for ics")
+parser.add_argument("-o", "--outputdir",    action="store",      type=str,   default="../single_eflow_results"  ,   help="output directory for ics")
 parser.add_argument("--iovref",    action="store",      type=int,   default=0  ,   help="reference iov to be normalized")
 parser.add_argument("--merge",  action='store_true' ,  help="merge fill with less hits than a thr")
 parser.add_argument("--savePlots",  action='store_true' ,  help="save or not the plots")
@@ -60,7 +60,7 @@ eehits = ak.unflatten(runs.EcalPhiSymEE, splits, axis=0, behavior=runs.behavior)
 
 niovs = len(splits)
 
-# try to put togheter fills with less stats
+# try to put together fills with less stats
 if merge:
     nhitsTOT = ak.sum(ebhits.nhits, axis=1)
     
@@ -114,8 +114,12 @@ k = ak.linear_fit(info.miscalibs_eb, ebhits.sumet_v, axis=2)
 #    - 1 iov k-factors map
 
 # k-factor histo
-plt.hist(ak.flatten(k.slope), bins=1000, range=[0,4])
+plt.hist(ak.flatten(k.slope), bins=1000, range=[-1,4], density = True)
 plt.xlabel('k-factor')
+plt.ylabel("frequency density")
+if savePlots: 
+    for form in fileFormats:
+        plt.savefig("%s/kFactorHisto.%s"%(outputdir, form))
 plt.clf()
 plt.close()
 
@@ -123,6 +127,9 @@ plt.close()
 
 plt.hist(ak.flatten(k.intercept), bins=1000, range=[-0.1, 0.1])
 plt.xlabel('fit intercept')
+if savePlots: 
+    for form in fileFormats:
+        plt.savefig("%s/kFitIntercept.%s"%(outputdir, form))
 plt.clf()
 plt.close()
 
@@ -142,10 +149,11 @@ plt.close()
 # k-factor map
 plt.hist2d(ak.to_numpy(ebhits.iphi[iovref,:]), ak.to_numpy(ebhits.ieta[iovref,:]), weights=ak.to_numpy(k.slope[iovref]), 
            bins=[360, 171], range=[[0.5,360.5], [-85.5, 85.5]], 
-           cmap='cividis', cmin=2, cmax=3)
+           cmap='cividis')#, cmin=2, cmax=3)
 plt.xlabel('i $\phi$')
 plt.ylabel('i $\eta$')
 plt.title('k-factor')
+plt.colorbar()
 if savePlots: 
     for form in fileFormats:
         plt.savefig("%s/map_kfactor.%s"%(outputdir, form))
@@ -184,6 +192,9 @@ ws = ak.Array([ws] * niovs)
 
 sumEtEB = ak.sum(ak.mask(ebhits.sumet, boundaryCrystals(ebhits), valid_when=False), axis=1)
 sumEtEBw = ak.mean(ak.mask(ebhits.sumet, boundaryCrystals(ebhits), valid_when=False), weight = ws ,  axis=1)
+print(sumEtEB, sumEtEBw)
+#sumEtEB and sumEtEBw are a factor of 62100 out from each other, this doesn't matter because it affects sumEtEBw and sumEtEBw[iovref] (and hence norm) equally 
+#so this doesn't affect eflow or eflowW, the only difference is the actuall affect of the weighting
 
 ### Eflow ICs normalized to ref IOV
 
@@ -192,7 +203,7 @@ eflow = (((ebhits.sumet/sumEtEB)/norm)-1)/k.slope+1
 
 normW = ak.Array(np.repeat([ebhits.sumet[iovref]/sumEtEBw[iovref]], niovs, axis=0)) 
 eflowW = (((ebhits.sumet/sumEtEBw)/normW)-1)/k.slope+1
-
+pd.DataFrame((ebhits.sumet/(sumEtEBw*normW))).to_csv('norm_differences.csv')
 
 ## EFlow plots examples
 
@@ -228,6 +239,19 @@ if savePlots:
 plt.clf()
 plt.close()
 
+
+#plot the distribution of the EFlow intercalibration constants
+plt.hist(ak.to_numpy(eflow[-1]), bins = int(len(ak.to_numpy(eflow[-1]))), density = True)
+plt.xlabel("EFlow ICs")
+plt.ylabel("Frequency Density")
+plt.title("EFlow ICs distribution")
+if savePlots: 
+    for form in fileFormats:
+        plt.savefig('%s/distICs_fill%s.%s'%(outputdir, str(info.fill[-1]).replace("[","").replace("]",""), form))
+plt.clf()
+plt.close()
+
+
 # plot the map of the last iov eflow Weighted
 plt.hist2d(ak.to_numpy(ebhits.iphi[-1,:]), ak.to_numpy(ebhits.ieta[-1,:]), weights=ak.to_numpy(eflowW[-1]), 
            bins=[360, 171], range=[[0.5,360.5], [-85.5, 85.5]], 
@@ -256,8 +280,6 @@ if saveICs:
         tosave[''] = 0 
         tosave.fillna(1, inplace=True)
         os.makedirs('%s/%s'%(outputdir, str(info.fill[ifill]).replace("[","").replace("]","")), exist_ok=True)   
-        tosave.to_csv('%s/%s/file.txt'%(outputdir, str(info.fill[ifill]).replace("[","").replace("]","")), float_format='%.6f', index=False, header=False)
-        
-
+        tosave.to_csv('%s/%s/ICsfile.txt'%(outputdir, str(info.fill[ifill]).replace("[","").replace("]","")), float_format='%.6f', index=False, header=False)
         
 

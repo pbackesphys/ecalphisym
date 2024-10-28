@@ -67,19 +67,20 @@ if args.verbosity >= 1:
    print("Running on these files: ")
    print(fileset)
 
-#Temporary needed to avoid crashing due to not found files
+#Temporary needed to avoid crashing due to not found files, need one of the three methods to determine fileset
 if "Run2022D" in eras:
     fileset["Run2022D"].remove('/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation_prompt/phisym/357889/phisymreco_nano_0.root')
 
 # parsing data from a txt (just for testing)
 #import ast
-#with open("dictionaryFilesC.txt", "r") as data:
+#with open("../ecalphisym/calibration/dictionaryFilesC.txt", "r") as data:
 #    fileset = ast.literal_eval(data.read())
 #fileset = {'PhiSym': ['/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation_prompt/phisym/356489/phisymreco_nano_1.root', 
 #                      '/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation_prompt/phisym/356951/phisymreco_nano_0.root', 
 #                      '/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation_prompt/phisym/356969/phisymreco_nano_0.root',
-#                      '/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation_prompt/phisym/356469/phisymreco_nano_0.root']}
-#print( fileset)
+#                     '/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation_prompt/phisym/356469/phisymreco_nano_0.root']}
+#end of temporary testing section
+print(fileset)
 
 iterative_run = Runner(
     executor = FuturesExecutor(compression=None, workers=4),
@@ -95,8 +96,9 @@ runs = out.run
 hitseb = ak.flatten(out.info.hitseb)
 fills = ak.flatten(out.info.fill)
 idx = ak.argsort(runs)
+if args.verbosity >=2: print(idx, runs)
 
-# requiring at least nhistmin for each IOV
+# requiring at least nhitsmin for each IOV
 runs_merged_i = []
 runs_merged_f = []
 counts_merged = [0]
@@ -193,7 +195,10 @@ if args.verbosity >= 1: print ("Deriving the corrections...")
 ######## IMPLEMENTIG normalization per Ring
 #sumEtRing = []
 #for iRing in range(-85,86):
-#    sumEtRing.append( ak.sum(ak.mask(ebhits.sumet, ebhits.ieta == iRing, valid_when=True), axis=1)) # sum 
+#    sumEtRing.append( ak.sum(ak.mask(# It looks like the code you provided is not valid Python code.
+# It seems to be a random string "ebhits" followed by some
+# comment symbols "
+#ebhits.sumet, ebhits.ieta == ((iRing, valid_when=True), axis=1)) # sum 
 #
 #sumEtRing.pop(85)
 #print()
@@ -332,7 +337,5 @@ for i,irun in enumerate(runs_merged_i):
      tosave.fillna(1, inplace=True)
      os.makedirs('%s/%s'%(outputdir, str(irun).replace("[","").replace("]","")), exist_ok=True)   
      tosave.to_csv('%s/%s/file.txt'%(outputdir, str(irun).replace("[","").replace("]","")), float_format='%.6f', index=False, header=False)
-        
-
-        
+     print(tosave.head())
 
