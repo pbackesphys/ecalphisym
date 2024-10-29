@@ -42,7 +42,9 @@ ak_eop = eop.arrays(filter_name = "/charge|eta/")
 
 print  ("doing phisym  histos")
 # ieat histo phisym
-hist_phisym,bins =np.histogram(ak.to_numpy(ebhits.ieta[1,:]), weights=ak.to_numpy(ebhits.sumet[1,:]), 
+
+print((ebhits.ieta[0, [0, 1, 2, 10000, 10001]]), (ebhits.sumet[0, [0, 1, 2, 10000, 10001]]))
+hist_phisym,bins =np.histogram(ak.to_numpy(ebhits.ieta[0,:]), weights=ak.to_numpy(ebhits.sumet[0,:]), 
            bins=171, range=[-85.5, 85.5])
 hist_phisym = np.delete(hist_phisym, 85)
 

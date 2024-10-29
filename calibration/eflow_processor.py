@@ -28,7 +28,7 @@ parser.add_argument("--eras",            action="store",      type=str,         
 parser.add_argument("-w", "--weights",   action="store",      type=str,   default="",           help="input eta weights: .txt format; in default mode calculate eflow wo eta weights")
 parser.add_argument("--iovref",          action="store",      type=int,   default=0,            help="reference iov to be normalized")
 parser.add_argument("--nhits",           action="store",      type=int,   default=3000000000,   help="value of minimum nhits per iov")
-parser.add_argument("-o", "--outputdir", action="store",      type=str,   default="../results", help="output directory for ics")
+parser.add_argument("-o", "--outputdir", action="store",      type=str,   default="../eflow_processor_results", help="output directory for ics")
 parser.add_argument("--savePlots",       action="store_true",                                   help="save some plots")
 parser.add_argument("-v", "--verbosity", action="store",      type=int,   default=1,            help="verbosity level")
 
@@ -256,7 +256,7 @@ with  uproot.recreate("%s/history.root"%outputdir) as file:
             "sumEtB"  : [sumEtEB[iov]         for iov in range(0,niovs)],
             "sumEt"   : [ebhits.sumet[iov,:]  for iov in range(0,niovs)],
             "eflow"   : [eflow[iov,:]         for iov in range(0,niovs)],
-            #"eflow_w" : [eflow_w[iov,:]       for iov in range(0,niovs)],
+            "eflow_w" : [eflow_w[iov,:]       for iov in range(0,niovs)],
     
     }
 

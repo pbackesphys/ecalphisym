@@ -192,7 +192,7 @@ eflow = (((ebhits.sumet/sumEtEB)/norm)-1)/k.slope+1
 
 normW = ak.Array(np.repeat([ebhits.sumet[iovref]/sumEtEBw[iovref]], niovs, axis=0)) 
 eflowW = (((ebhits.sumet/sumEtEBw)/normW)-1)/k.slope+1
-
+print(len(ebhits.sumet[0]))
 
 ## EFlow plots examples
 
