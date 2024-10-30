@@ -12,4 +12,4 @@ conda activate /afs/cern.ch/user/p/pbackes/.conda/envs/phisym
 cd ../../automation-control/
 
 # Run the Python script
-python3 ../ecalphisym/calibration/eflow_processor.py --dbname ecal_prompt_v2 --campaign prompt --eras Run2024B -w ../ecalphisym/calibration/weight.txt -o ../www/eflow_processor_out --savePlots --verbosity 2
+python3 ../ecalphisym/calibration/eflow_processor.py --dbname ecal_prompt_v2 --campaign prompt --eras Run2024B -w ../ecalphisym/calibration/weight.txt -o ../www/eflow_processor_out --savePlots --verbosity 1
