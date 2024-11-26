@@ -24,24 +24,33 @@ plt.style.use(mplhep.style.ROOT)
 parser = parser = argparse.ArgumentParser()
 parser.add_argument("--dbname",          action="store",      type=str,                         help="dbname:: to retrieve files from ecalutomation, see doc")  
 parser.add_argument("--campaign",        action="store",      type=str,                         help="campaing:: to retrieve files from ecalutomation, see doc")  
-parser.add_argument("--eras",            action="store",      type=str,                         help="eras:: to retrieve files from ecalutomation, see doc")  
 parser.add_argument("-w", "--weights",   action="store",      type=str,   default="",           help="input eta weights: .txt format; in default mode calculate eflow wo eta weights")
 parser.add_argument("--iovref",          action="store",      type=int,   default=0,            help="reference iov to be normalized")
 parser.add_argument("--nhits",           action="store",      type=int,   default=3000000000,   help="value of minimum nhits per iov")
 parser.add_argument("-o", "--outputdir", action="store",      type=str,   default="../eflow_processor_results", help="output directory for ics")
 parser.add_argument("--savePlots",       action="store_true",                                   help="save some plots")
 parser.add_argument("-v", "--verbosity", action="store",      type=int,   default=1,            help="verbosity level")
-
+parser.add_argument("--run_list",          action="store",      type=str,                         help="list of run numbers:: to retrieve files from ecalutomation, see doc (not yet)")
+parser.add_argument("--files_list",      action="store",      type=str,                         help="list of input file directories:: to retrieve files from ecalutomation, see doc (not yet)" )
 args = parser.parse_args()
 
 dbname = args.dbname # '../Run2018D_test.root'
 campaign = args.campaign # '../Run2018D_test.root'
-eras = args.eras.split(',')
 outputdir =args.outputdir #"../ICs_testing"
 weights = args.weights
 iovref = args.iovref
 nhitsmin = args.nhits
+run_list = args.run_list
+files_list = args.files_list
 
+
+if run_list is None and files_list is None:
+    print("must have either the run number list or a list of phisym nanoADO files")
+    assert False
+if run_list is not None and files_list is not None:
+    print("""only provide one from run_list and files_list:
+          make your mind up""")
+    assert False
 
 doWeightedMean = False #bool to perform or not eta-weighted average
 
@@ -59,27 +68,19 @@ os.makedirs(outputdir, exist_ok=True)
 fileset =  {}
 rctrl = RunCtrl(dbname=dbname, campaign=campaign)
 
-
-for era in eras:
-    fileset[era] = [f for f in rctrl.getOutput(era=era, process='phisym-reco')]
+if run_list is not None:
+    runs = run_list.split(",")
+    print("run numbers:", runs)
+    phisym_files = {'PhiSym': list(rctrl.getOutput(process='phisym-reco', runs = runs))}   
+else:
+    #using a list of physim files to find the eop files
+    phisym_list = files_list.split(',')
+    phisym_files = {'Phisym': phisym_list}
 
 if args.verbosity >= 1:
    print("Running on these files: ")
    print(fileset)
 
-#Temporary needed to avoid crashing due to not found files
-if "Run2022D" in eras:
-    fileset["Run2022D"].remove('/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation_prompt/phisym/357889/phisymreco_nano_0.root')
-
-# parsing data from a txt (just for testing)
-#import ast
-#with open("dictionaryFilesC.txt", "r") as data:
-#    fileset = ast.literal_eval(data.read())
-#fileset = {'PhiSym': ['/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation_prompt/phisym/356489/phisymreco_nano_1.root', 
-#                      '/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation_prompt/phisym/356951/phisymreco_nano_0.root', 
-#                      '/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation_prompt/phisym/356969/phisymreco_nano_0.root',
-#                      '/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation_prompt/phisym/356469/phisymreco_nano_0.root']}
-#print( fileset)
 
 iterative_run = Runner(
     executor = FuturesExecutor(compression=None, workers=4),

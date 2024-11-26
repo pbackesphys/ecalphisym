@@ -8,8 +8,5 @@ source /afs/cern.ch/user/p/pbackes/.bashrc
 # Activate the phisym conda environment
 conda activate /afs/cern.ch/user/p/pbackes/.conda/envs/phisym
 
-# Change directory to the location required by the python script
-cd ../../automation-control/
-
 # Run the Python script
-python3 ../ecalphisym/calibration/eflow_processor.py --dbname ecal_prompt_v2 --campaign prompt --eras Run2024B -w ../ecalphisym/calibration/weight.txt -o ../www/eflow_processor_out --savePlots --verbosity 1
+python3 eflow_processor.py --dbname ecal_rerecos_v1 --campaign test_eflow_v1 --run_list 386642 -w weight.txt -o ../../www/eflow_processor_out --savePlots --verbosity 2
