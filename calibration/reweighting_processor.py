@@ -3,6 +3,7 @@ print("starting the reweighting processor ")
 import re, ast
 import awkward as ak
 import numpy as np
+
 import uproot
 import glob as glob
 import matplotlib.pyplot as plt
@@ -28,29 +29,6 @@ plt.rcParams['yaxis.labellocation'] = 'top'
 plt.style.use(mplhep.style.ROOT)
 
 
-
-def findFilesEop(rctrl,  era, selected_filelist_era=[]):
-    selected_filelist_era=[]
-    ecalelf = set()
-
-    if "2022C" in era:
-        ecalelf.update(rctrl.getOutput(era = era,  process='ecalelf-ntuples'))
-
-    elif "2022D" in era:
-        ecalelf.update(rctrl.getOutput(era = era,  process='ecalelf-ntuples'))
-
-    else:
-        ecalelf.update(rctrl.getOutput(era = era, process='ecalelf-ntuples-wskim'))
-        ecalelf.update(rctrl.getOutput(era = era, process='ecalelf-ntuples-zskim'))
-
-    for ntupla in ecalelf:
-        for f in ntupla.split(','):
-            if "ntuple" in f:
-                selected_filelist_era.append(f)
-
-    return selected_filelist_era
-
-
 def findFilesEopruns(runs, rctrl):
     ecalelf = set()
     selected_list = []
@@ -63,43 +41,34 @@ def findFilesEopruns(runs, rctrl):
                 selected_list.append(ntuple)
     return selected_list 
 
-def find_run_numbers(min_run, max_run):
-    run_numbers = []
-    files_pattern = r"/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation*/phisym/*/phisymreco_nano_*.root"
-    files = glob.glob(files_pattern)
-    for i, file in enumerate(files):
-        file = file.split(r"/")
-        try: 
-            run_number = int(file[10])
-        except:
-            run_number = int(file[9])
-        run_numbers.append(run_number)
-    runs = np.array(run_numbers)
-    runs = runs[(runs <= max_run) & (runs >= min_run)]
-    return np.unique(runs).tolist()
-
 
 #parse arguments
 parser = parser = argparse.ArgumentParser()
-parser.add_argument("--dbname",          action="store",      type=str,                         help="campaing:: to retrieve files from ecalutomation, see doc")
-parser.add_argument("--campaign",        action="store",      type=str,                         help="campaing:: to retrieve files from ecalutomation, see doc")
-parser.add_argument("-o", "--outputdir", action="store",      type=str,   default="./",         help="output directory")
-parser.add_argument("-l", "--label",     action="store",      type=str,   default="",           help="label to identify the weight file")
-parser.add_argument("-v", "--verbosity", action="store",      type=int,   default=1,            help="verbosity level")
-parser.add_argument("--run_list",          action="store",    type=str,   default=None,          help="minimum then maximum run numbers:: to retrieve files from ecalutomation, see doc (not yet)")
-parser.add_argument("--files_list",      action="store",      type=str,   default=None,          help="list of input file directories:: to retrieve files from ecalutomation, see doc (not yet)" )
+parser.add_argument("--phisym_list",        action="store",      type=str,   default=None,         help="list of input file directories:: to retrieve files from ecalutomation, see doc (not yet)" )
+parser.add_argument("--ecalelf_list",        action="store",      type=str,  default=None,         help="list of input file directories:: to retrieve files from ecalutomation, see doc (not yet)" )
+parser.add_argument("--dbname",          action="store",      type=str,      default=None,         help="campaing:: to retrieve files from ecalutomation, see doc")
+parser.add_argument("--campaign",        action="store",      type=str,      default=None,         help="campaing:: to retrieve files from ecalutomation, see doc")
+parser.add_argument("-o", "--outputdir", action="store",      type=str,      default="./",         help="output directory for the weights file")
+parser.add_argument("--eosplots",        action="store",      type=str,      default="./",         help="output directory for the produced plots")
+parser.add_argument("-l", "--label",     action="store",      type=str,      default="",           help="label to identify the weight file")
+parser.add_argument("-v", "--verbosity", action="store",      type=int,      default=1,            help="verbosity level")
+parser.add_argument("--run_list",        action="store",    type=str,        default=None,         help="minimum then maximum run numbers:: to retrieve files from ecalutomation, see doc (not yet)")
+
 args = parser.parse_args()
 dbname = args.dbname 
 campaign = args.campaign
-outputdir =args.outputdir 
+weights_outputdir =args.outputdir
+plots_outputdir = args.eosplots
 label = args.label
 run_list = args.run_list
-files_list = args.files_list
+phisym_list = args.phisym_list
+ecalelf_list = args.ecalelf_list
 
-if run_list is None and files_list is None:
+
+if run_list is None and phisym_list is None:
     print("must have either the run number list or a list of phisym nanoADO files")
     assert False
-if run_list is not None and files_list is not None:
+if run_list is not None and phisym_list is not None:
     print("""only provide one from run_list and files_list:
           make your mind up""")
     assert False
@@ -110,12 +79,13 @@ if run_list is not None and files_list is not None:
     and an accumulator function (EcalPhiSymProcessor.py)
     to read multiple files in coffea and sum above the interesting infos
 """
-rctrl = RunCtrl(dbname=dbname, campaign=campaign)
+
 
 
 
 
 if run_list is not None:
+    rctrl = RunCtrl(dbname=dbname, campaign=campaign)
     runs = ast.literal_eval(run_list)
     print("run numbers:", runs)
 
@@ -123,21 +93,11 @@ if run_list is not None:
     eop_files = findFilesEopruns(runs, rctrl)
 else:
     #using a list of physim files to find the eop files
-    phisym_list = files_list.split(',')
-    phisym_files = {'Phisym': phisym_list}
-    phisym_run_numbers = [phisym_file.split(r"/")[11] for phisym_file in phisym_list]
-    ope_files = set()
-    for num in phisym_run_numbers:
-          #typically multiple ope files for the same phisym file
-          file_pattern = f"/eos/cms/store/group/dpg_ecal/alca_ecalcalib/automation_prompt/prompt/ecalelf/*skim/num/ntuple_*.root"
-          here = set(glob.glob(file_pattern))
-          for ope_file in here: 
-              ope_files.add(eop_file)
-          
-          
-          
-          
+    phisym_files = {'PhiSym': ast.literal_eval(phisym_list)}
+    eop_files = ast.literal_eval(ecalelf_list)
     
+
+
 
 if args.verbosity >= 1:
     print("Running on these PhiSym files: ")
@@ -184,7 +144,7 @@ hist_phisym,bins_phisym =np.histogram(ak.to_numpy(ebhits.ieta[0,:]), weights=ak.
 hist_phisym[85] = 0
 plt.bar(np.delete(bins_phisym,171)+0.5, height = hist_phisym, width = 1)
 plt.xlabel('i$\eta$')
-plt.savefig("%s/phisymEta_%s.png"%(outputdir,label))
+plt.savefig("%s/phisymEta_%s.png"%(plots_outputdir,label))
 plt.clf()
 plt.close()
 
@@ -202,7 +162,7 @@ hist_eop,bins_eop =np.histogram(ak.to_numpy(ak.mask(eop.etaEle[:,0], abs(eop.cha
 hist_eop[85] = 0
 plt.bar(np.delete(bins_eop,171)+0.5, height = hist_eop, width = 1)
 plt.xlabel('i$\eta$')
-plt.savefig("%s/eopEta_%s.png"%(outputdir,label))
+plt.savefig("%s/eopEta_%s.png"%(plots_outputdir,label))
 plt.clf()
 plt.close()
 
@@ -220,19 +180,19 @@ weights = hist_eop/hist_phisym * (np.sum(hist_phisym) / np.sum(hist_eop) )
 plt.bar(np.delete(np.delete(bins_eop,85),170)+0.5, height = weights, width = 1)
 plt.ylabel('weights')
 plt.xlabel('i$\eta$')
-plt.savefig("%s/weightsEta_%s.png"%(outputdir,label))
+plt.savefig("%s/weightsEta_%s.png"%(plots_outputdir,label))
 plt.clf()
 plt.close()
 
 if args.verbosity >= 1 : print ("--> saving weights in .txt.")
 # save weights ordered from -85 to 85
-np.savetxt('%s/weights_%s.txt'%(outputdir,label), weights, delimiter=',')   
+np.savetxt(f'{weights_outputdir}weights.txt', weights, delimiter=',')   
 
 
 
 plt.hist( weights)
 plt.xlabel('weights')
-plt.savefig('%s/weights_%s.png'%(outputdir,label))
+plt.savefig('%s/weights_%s.png'%(plots_outputdir,label))
 plt.clf()
 plt.close()
 
