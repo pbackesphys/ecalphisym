@@ -350,12 +350,6 @@ for i,irun in enumerate(runs_merged_i):
          tosave = pd.concat ([ak.to_pandas(ebhits[i].ieta).astype(int), ak.to_pandas(ebhits[i].iphi), ak.to_pandas(ebhits[i].zside()).astype(int), ak.to_pandas(eflow[i])], axis = 1)
      tosave[''] = 0 
      tosave.fillna(1, inplace=True)
-<<<<<<< HEAD
-     os.makedirs('%s/%s'%(outputdir, str(irun).replace("[","").replace("]","")), exist_ok=True)   
-     tosave.to_csv('%s/%s/file.txt'%(outputdir, str(irun).replace("[","").replace("]","")), float_format='%.6f', index=False, header=False)
-     print(tosave.head())
-
-=======
      run_dir = '%s/%s'%(file_outputdir, str(irun).replace("[","").replace("]",""))
      os.makedirs(run_dir, exist_ok=True)   
      tosave.to_csv(f'{run_dir}/file.txt', float_format='%.6f', index=False, header=False)
@@ -365,4 +359,7 @@ for i,irun in enumerate(runs_merged_i):
      
 jctrl.done(jid = jid, fields={'output': output_str[1:]})
 #the command to set the job status in the case of faileur is in the eflow_processor.sh file
+<<<<<<< HEAD
+>>>>>>> dev
+=======
 >>>>>>> dev
